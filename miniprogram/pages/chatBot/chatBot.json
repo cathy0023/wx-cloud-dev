@@ -1,6 +1,7 @@
 {
+  "navigationBarTitleText": "对话练习",
   "usingComponents": {
-    "agent-ui":"/components/agent-ui/index"
+    "agent-ui": "/components/agent-ui/index"
   },
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": false
 }

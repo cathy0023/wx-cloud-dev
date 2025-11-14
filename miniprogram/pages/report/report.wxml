@@ -1,0 +1,60 @@
+<!--pages/report/report.wxml-->
+<view class="container">
+  <view wx:if="{{loading}}" class="loading">
+    <text>加载中...</text>
+  </view>
+
+  <view wx:else class="report-content">
+    <view class="header">
+      <view class="title">评价报告</view>
+      <view class="date">{{report.formattedDate || report.createTime}}</view>
+    </view>
+
+    <!-- 评分展示 -->
+    <view class="scores-section">
+      <view class="score-item">
+        <view class="score-label">沟通技巧</view>
+        <view class="score-value">{{report.communicationSkills}}</view>
+        <view class="score-bar">
+          <view class="score-fill" style="width: {{report.communicationSkills}}%"></view>
+        </view>
+      </view>
+      <view class="score-item">
+        <view class="score-label">诊断准确性</view>
+        <view class="score-value">{{report.diagnosticAccuracy}}</view>
+        <view class="score-bar">
+          <view class="score-fill" style="width: {{report.diagnosticAccuracy}}%"></view>
+        </view>
+      </view>
+      <view class="score-item">
+        <view class="score-label">专业性</view>
+        <view class="score-value">{{report.professionalism}}</view>
+        <view class="score-bar">
+          <view class="score-fill" style="width: {{report.professionalism}}%"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 详细分析 -->
+    <view class="analysis-section">
+      <view class="section-title">详细分析</view>
+      <view class="analysis-text">{{report.analysis}}</view>
+    </view>
+
+    <!-- 改进建议 -->
+    <view class="suggestions-section">
+      <view class="section-title">改进建议</view>
+      <view wx:for="{{report.suggestions}}" wx:key="index" class="suggestion-item">
+        <text class="suggestion-number">{{index + 1}}</text>
+        <text class="suggestion-text">{{item}}</text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="actions">
+      <view class="btn btn-primary" bind:tap="goToHistory">查看历史记录</view>
+      <view class="btn btn-secondary" bind:tap="goToIndex">返回首页</view>
+    </view>
+  </view>
+</view>
+

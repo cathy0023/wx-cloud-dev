@@ -148,12 +148,13 @@
   /* position: absolute; */
   /* bottom: 0; */
   position: relative;
-  padding: 0px 16rpx 24px;
+  padding: 0px 16rpx;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
 .foot_function {
-  /* margin: 0px 0px 15px; */
+  margin: 0px 0px 24px;
 }
 
 .footer .file_list {

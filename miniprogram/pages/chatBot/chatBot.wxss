@@ -1,1 +1,45 @@
 /* pages/chatBot/chatBot.wxss */
+.chat-container {
+  height: 100vh;
+  height: calc(100vh - env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 30rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.patient-info {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.patient-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.patient-category {
+  background: #667eea;
+  color: #fff;
+  padding: 6rpx 16rpx;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+}
+
+.end-btn {
+  background: #ff6b6b;
+  color: #fff;
+  padding: 12rpx 24rpx;
+  border-radius: 20rpx;
+  font-size: 26rpx;
+}

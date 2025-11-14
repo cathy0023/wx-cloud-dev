@@ -63,21 +63,21 @@
           {{refreshText}}
         </view>
         <view wx:if="{{chatMode === 'model'}}" class="nav">
-          <image src="{{bot.avatar||modelConfig.logo}}" mode="aspectFill" class="avatar" />
-          <view style="line-height: 47px; font-size: 20px; font-weight: 500;">{{chatMode==='bot'?bot.name:modelConfig.modelProvider}}</view>
+          <image wx:if="{{modelConfig.logo}}" src="{{bot.avatar||modelConfig.logo}}" mode="aspectFill" class="avatar" />
+          <view wx:if="{{chatMode==='bot'?bot.name:modelConfig.modelProvider}}" style="line-height: 47px; font-size: 20px; font-weight: 500;">背景信息</view>
           <view style="line-height: 26px;padding: 0px 16px; font-size: 32rpx;">{{chatMode==='bot'?"":modelConfig.welcomeMsg}}</view>
         </view>
         <block wx:for="{{chatRecords}}" wx:key="record_id">
           <!-- 系统聊天 -->
-          <view class="system" style="padding-left: {{showBotAvatar?80:0}}rpx;" wx:if="{{item.role==='assistant'}}">
-            <view class="avatar-left" wx:if="{{showBotAvatar}}">
+          <view class="system" style="padding-left: 0rpx;" wx:if="{{item.role==='assistant'}}">
+            <view class="avatar-left" wx:if="{{showBotAvatar && (chatMode==='bot'?bot.avatar:modelConfig.logo)}}">
               <image src="{{chatMode==='bot'?bot.avatar:modelConfig.logo}}" mode="aspectFill" style="width: 56rpx;height: 56rpx; border-radius: 28rpx;" />
             </view>
             <view>
               <!-- 最后一条消息，并且是发送状态显示发送中 -->
               <block wx:if="{{(chatRecords.length-1)===index&&chatStatus===1}}">
                 <view style="display: flex;align-items: center; gap: 4px; font-size: 32rpx;line-height: 1.8;">
-                  <image src="./imgs/loading.svg" mode="aspectFill" style="width: 14px;height: 14px;" /> 请稍等，正在卖力思考中 🤔
+                  <image src="./imgs/loading.svg" mode="aspectFill" style="width: 14px;height: 14px;" /> 对方正在输入中
                 </view>
               </block>
               <block wx:else>
@@ -184,7 +184,7 @@
           </view>
           <!-- 用户输入 -->
           <view class="userContent" wx:if="{{item.role==='user'}}">
-            <view class="user" style="padding-left: {{showBotAvatar?80:0}}rpx;display: flex;">
+            <view class="user" style="padding-left: 0rpx;display: flex;">
               <view class="user_content"  bind:longpress="handleLongPress" data-content="{{item.content}}" data-id="{{item.record_id}}">
                 {{item.content}}
               <!-- 长按菜单 -->
@@ -207,7 +207,7 @@
         </block>
         <!-- 推荐问题 -->
         <block wx:for="{{questions}}" wx:key="item">
-          <view class="questions" style="padding-left: {{showBotAvatar?80:0}}rpx;">
+          <view class="questions" style="padding-left: 0rpx;">
             <view class="question_content" bind:tap="handleSendMessage" data-message="{{item}}">{{item}}</view>
           </view>
         </block>

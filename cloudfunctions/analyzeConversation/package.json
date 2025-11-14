@@ -1,0 +1,10 @@
+{
+  "name": "analyzeConversation",
+  "version": "1.0.0",
+  "description": "分析对话并生成评价报告",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}
+

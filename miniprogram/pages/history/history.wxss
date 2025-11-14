@@ -1,0 +1,129 @@
+/* pages/history/history.wxss */
+.container {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40rpx 20rpx;
+  color: #fff;
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: bold;
+  text-align: center;
+}
+
+.filter-bar {
+  background: #fff;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #eee;
+}
+
+.filter-scroll {
+  white-space: nowrap;
+  padding: 0 20rpx;
+}
+
+.filter-item {
+  display: inline-block;
+  padding: 12rpx 24rpx;
+  margin-right: 16rpx;
+  border-radius: 20rpx;
+  background: #f0f0f0;
+  color: #666;
+  font-size: 26rpx;
+}
+
+.filter-item.active {
+  background: #667eea;
+  color: #fff;
+}
+
+.loading {
+  text-align: center;
+  padding: 100rpx 0;
+  color: #666;
+  font-size: 28rpx;
+}
+
+.conversation-list {
+  padding: 20rpx;
+}
+
+.conversation-item {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.conversation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+}
+
+.conversation-info {
+  flex: 1;
+}
+
+.patient-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.conversation-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.delete-btn {
+  background: #ff6b6b;
+  color: #fff;
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+}
+
+.conversation-meta {
+  display: flex;
+  gap: 20rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.status {
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+}
+
+.status.ongoing {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status.ended {
+  background: #d4edda;
+  color: #155724;
+}
+
+.duration,
+.message-count {
+  color: #999;
+}
+
+.empty {
+  text-align: center;
+  padding: 100rpx 0;
+  color: #999;
+  font-size: 28rpx;
+}
+

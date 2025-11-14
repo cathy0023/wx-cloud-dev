@@ -43,6 +43,10 @@ Component({
         welcomeMsg: String,
       },
     },
+    systemPrompt: {
+      type: String,
+      value: "",
+    },
   },
 
   observers: {
@@ -1321,6 +1325,11 @@ Component({
         chatStatus: 1, // 聊天状态切换为1发送中
       });
 
+      // 触发消息添加事件，通知父组件保存消息
+      this.triggerEvent('messageadd', {
+        message: userRecord
+      });
+
       // 新增一轮对话记录时 自动往下滚底
       this.autoToBottom();
       if (chatMode === "bot") {
@@ -1603,6 +1612,16 @@ Component({
           chatStatus: 0,
           [`chatRecords[${lastValueIndex}].hiddenBtnGround`]: isManuallyPaused,
         }); // 对话完成，切回0 ,并且修改最后一条消息的状态，让下面的按钮展示
+        
+        // 触发消息完成事件，通知父组件保存完整的助手回复
+        const assistantMessage = {
+          role: 'assistant',
+          content: contentText,
+          record_id: lastValue.record_id
+        };
+        this.triggerEvent('messagecomplete', {
+          message: assistantMessage
+        });
         if (bot.isNeedRecommend && !isManuallyPaused) {
           const cloudInstance = await getCloudInstance(this.data.envShareConfig);
           const ai = cloudInstance.extend.AI;
@@ -1637,19 +1656,32 @@ Component({
         const cloudInstance = await getCloudInstance(this.data.envShareConfig);
         const ai = cloudInstance.extend.AI;
         const aiModel = ai.createModel(modelProvider);
+        
+        // 构建messages数组，支持systemPrompt
+        const messages = [];
+        // 如果有systemPrompt，添加到messages开头
+        if (this.data.systemPrompt) {
+          messages.push({
+            role: 'system',
+            content: this.data.systemPrompt
+          });
+        }
+        // 添加历史对话记录
+        messages.push(
+          ...chatRecords.map((item) => ({
+            role: item.role,
+            content: item.content,
+          })),
+          {
+            role: "user",
+            content: inputValue,
+          }
+        );
+        
         const res = await aiModel.streamText({
           data: {
             model: quickResponseModel,
-            messages: [
-              ...chatRecords.map((item) => ({
-                role: item.role,
-                content: item.content,
-              })),
-              {
-                role: "user",
-                content: inputValue,
-              },
-            ],
+            messages: messages,
           },
         });
         let contentText = "";
@@ -1704,6 +1736,20 @@ Component({
         const lastValue = newValue[newValue.length - 1];
         lastValue.hiddenBtnGround = isManuallyPaused; // 用户手动暂停，不显示下面的按钮
         this.setData({ chatRecords: newValue, chatStatus: 0 }); // 回正
+        
+        // 触发消息完成事件（model模式）
+        if (newValue.length > 0) {
+          const lastMessage = newValue[newValue.length - 1];
+          if (lastMessage.role === 'assistant' && lastMessage.content) {
+            this.triggerEvent('messagecomplete', {
+              message: {
+                role: 'assistant',
+                content: lastMessage.content,
+                record_id: lastMessage.record_id
+              }
+            });
+          }
+        }
       }
     },
     toBottom: async function (unit) {

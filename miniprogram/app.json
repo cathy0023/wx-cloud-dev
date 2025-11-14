@@ -1,5 +1,5 @@
 {
-  "pages": ["pages/index/index", "pages/chatBot/chatBot", "pages/foodBuy/foodBuy"],
+  "pages": ["pages/index/index", "pages/chatBot/chatBot", "pages/report/report", "pages/history/history", "pages/foodBuy/foodBuy"],
   "usingComponents": {
     "custom-map": "/components/toolCard/map/index",
     "custom-weather": "/components/toolCard/weather/index",
@@ -9,7 +9,7 @@
   "window": {
     "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "腾讯云开发Agent-UI",
+    "navigationBarTitleText": "心理咨询患者模拟",
     "backgroundColor": "#eeeeee",
     "backgroundTextStyle": "light",
     "enablePullDownRefresh": true

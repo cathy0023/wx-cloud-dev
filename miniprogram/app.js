@@ -1,4 +1,5 @@
 // app.js
+const { initPatients } = require('./utils/dbInit.js');
 
 App({
   onLaunch: function () {
@@ -13,6 +14,14 @@ App({
         env: "cy-test-3giyof3r7d1699ff",
         traceUser: true,
       });
+      
+      // 初始化数据库和预设患者角色数据
+      initPatients();
+      
+      // 初始化其他数据库集合（确保集合存在）
+      const { initReportsCollection, initConversationsCollection } = require('./utils/dbInit.js');
+      initReportsCollection();
+      initConversationsCollection();
     }
   },
 });

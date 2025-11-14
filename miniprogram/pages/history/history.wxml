@@ -1,0 +1,55 @@
+<!--pages/history/history.wxml-->
+<view class="container">
+  <view class="header">
+    <view class="title">历史对话记录</view>
+  </view>
+
+  <!-- 筛选栏 -->
+  <view class="filter-bar">
+    <scroll-view scroll-x="true" class="filter-scroll">
+      <view 
+        wx:for="{{categories}}" 
+        wx:key="*this"
+        class="filter-item {{filterCategory === item || (item === '全部' && !filterCategory) ? 'active' : ''}}"
+        data-category="{{item}}"
+        bind:tap="onFilterChange"
+      >
+        {{item}}
+      </view>
+    </scroll-view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">
+    <text>加载中...</text>
+  </view>
+
+  <view wx:else class="conversation-list">
+    <view 
+      wx:for="{{conversations}}" 
+      wx:key="_id"
+      class="conversation-item"
+      data-id="{{item._id}}"
+      bind:tap="viewConversation"
+    >
+      <view class="conversation-header">
+        <view class="conversation-info">
+          <view class="patient-name">{{item.patientName}}</view>
+          <view class="conversation-time">{{item.formattedTime || item.startTime}}</view>
+        </view>
+        <view class="delete-btn" data-id="{{item._id}}" catch:tap="deleteConversation">
+          <text>删除</text>
+        </view>
+      </view>
+      <view class="conversation-meta">
+        <text class="status {{item.status === '已结束' ? 'ended' : 'ongoing'}}">{{item.status}}</text>
+        <text wx:if="{{item.duration}}" class="duration">时长：{{item.duration}}分钟</text>
+        <text class="message-count">消息数：{{item.messages ? item.messages.length : 0}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && conversations.length === 0}}" class="empty">
+    <text>暂无历史记录</text>
+  </view>
+</view>
+

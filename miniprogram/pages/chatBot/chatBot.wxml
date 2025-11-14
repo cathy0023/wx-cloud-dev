@@ -1,5 +1,22 @@
 <!--pages/chatBot/chatBot.wxml-->
-<view>
-  <agent-ui agentConfig="{{agentConfig}}" showBotAvatar="{{showBotAvatar}}" chatMode="{{chatMode}}" modelConfig="{{modelConfig}}" envShareConfig="{{envShareConfig}}">
+<view class="chat-container">
+  <view class="chat-header">
+    <view class="patient-info">
+      <text class="patient-name">{{patientInfo.name}}</text>
+      <text class="patient-category">{{patientInfo.category}}</text>
+    </view>
+    <view class="end-btn" bind:tap="endConversation">
+      <text>结束对话</text>
+    </view>
+  </view>
+  <agent-ui 
+    systemPrompt="{{systemPrompt}}"
+    agentConfig="{{agentConfig}}" 
+    showBotAvatar="{{showBotAvatar}}" 
+    chatMode="{{chatMode}}" 
+    modelConfig="{{modelConfig}}" 
+    envShareConfig="{{envShareConfig}}"
+    bind:messageadd="onMessageAdd"
+    bind:messagecomplete="onMessageComplete">
   </agent-ui>
 </view>
