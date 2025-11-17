@@ -57,7 +57,9 @@ Page({
   // 加载报告数据
   async loadReport(reportId) {
     wx.showLoading({ title: '加载中...' });
+    
     try {
+      // 先尝试直接查询数据库（最快的方式）
       const res = await db.collection('reports').doc(reportId).get();
       const report = res.data;
       
@@ -77,21 +79,55 @@ Page({
       });
       wx.hideLoading();
     } catch (e) {
-      console.error('加载报告失败', e);
-      wx.hideLoading();
+      console.warn('直接查询失败，尝试通过云函数查询:', e);
       
-      // 检查是否是文档不存在或权限问题
+      // 如果直接查询失败（可能是权限问题），通过云函数查询
       const errorMsg = e.errMsg || e.message || '';
-      if (errorMsg.includes('cannot find document') || errorMsg.includes('not exist')) {
-        wx.showModal({
-          title: '报告不存在',
-          content: '报告可能尚未保存成功，或您没有权限访问此报告。请返回历史记录查看。',
-          showCancel: false,
-          success: () => {
-            wx.navigateBack();
+      if (errorMsg.includes('cannot find document') || errorMsg.includes('not exist') || errorMsg.includes('permission')) {
+        try {
+          // 通过云函数查询报告（云函数支持通过reportId查询）
+          const cloudRes = await wx.cloud.callFunction({
+            name: 'getReport',
+            data: {
+              reportId: reportId
+            }
+          });
+          
+          if (cloudRes.result && cloudRes.result.success && cloudRes.result.report) {
+            const report = cloudRes.result.report;
+            // 格式化日期
+            if (report.createTime) {
+              const date = report.createTime instanceof Date ? report.createTime : new Date(report.createTime);
+              report.formattedDate = this.formatDate(date);
+            }
+            
+            this.setData({
+              report: report,
+              loading: false
+            });
+            wx.hideLoading();
+            
+            if (cloudRes.result.warning) {
+              console.warn('报告查询警告:', cloudRes.result.warning);
+            }
+            return;
+          } else {
+            throw new Error(cloudRes.result?.error || '云函数查询失败');
           }
-        });
+        } catch (cloudError) {
+          console.error('云函数查询失败:', cloudError);
+          wx.hideLoading();
+          wx.showModal({
+            title: '报告不存在',
+            content: '报告可能尚未保存成功，或您没有权限访问此报告。请返回历史记录查看。',
+            showCancel: false,
+            success: () => {
+              wx.navigateBack();
+            }
+          });
+        }
       } else {
+        wx.hideLoading();
         wx.showToast({
           title: '加载失败: ' + (errorMsg || '未知错误'),
           icon: 'none',

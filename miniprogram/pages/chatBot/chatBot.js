@@ -64,11 +64,19 @@ ${patient.prompt}
 5. 以第一人称"我"来回答，就像真正的患者一样
 6. 根据咨询师的提问自然地回应，不要过度主动`;
 
+            // 根据患者类型判断使用扣子API还是deepseek
+            // 焦虑症患者使用扣子API，其他患者使用deepseek
+            const isAnxietyPatient = patient.category === "焦虑症";
+            const modelProvider = isAnxietyPatient ? "coze" : "deepseek";
+            const quickResponseModel = isAnxietyPatient ? "7566909917765107746" : "deepseek-chat";
+
             this.setData({
               patientId: patientId,
               patientInfo: patient,
               'modelConfig.welcomeMsg': welcomeMsg,
-              // modelProvider 必须是模型组名称（如 "deepseek"），不能是患者名称
+              'modelConfig.modelProvider': modelProvider,
+              'modelConfig.quickResponseModel': quickResponseModel,
+              // modelProvider 必须是模型组名称（如 "deepseek" 或 "coze"），不能是患者名称
               // 患者名称只用于显示，在 agent-ui 组件中已经改为显示"背景信息"
               systemPrompt: systemPrompt
             });

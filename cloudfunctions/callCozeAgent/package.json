@@ -1,0 +1,10 @@
+{
+  "name": "callCozeAgent",
+  "version": "1.0.0",
+  "description": "调用扣子API进行对话",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}
+

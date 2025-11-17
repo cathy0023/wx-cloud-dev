@@ -1,5 +1,5 @@
 // app.js
-const { initPatients } = require('./utils/dbInit.js');
+const { initPatients, updatePatients, resetPatients } = require('./utils/dbInit.js');
 
 App({
   onLaunch: function () {
@@ -22,6 +22,16 @@ App({
       const { initReportsCollection, initConversationsCollection } = require('./utils/dbInit.js');
       initReportsCollection();
       initConversationsCollection();
+      
+      // 将更新函数暴露到全局，方便在控制台调用
+      // 使用方法：在控制台输入 getApp().updatePatients(true) 或 getApp().resetPatients()
+      this.updatePatients = updatePatients;
+      this.resetPatients = resetPatients;
+      
+      console.log('数据库更新函数已暴露到全局：');
+      console.log('- getApp().updatePatients(true)  // 强制更新患者数据');
+      console.log('- getApp().updatePatients(false) // 只添加新患者');
+      console.log('- getApp().resetPatients()       // 重置所有患者数据');
     }
   },
 });

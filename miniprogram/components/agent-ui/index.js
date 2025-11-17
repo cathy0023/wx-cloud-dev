@@ -1653,101 +1653,409 @@ Component({
       }
       if (chatMode === "model") {
         const { modelProvider, quickResponseModel } = modelConfig;
-        const cloudInstance = await getCloudInstance(this.data.envShareConfig);
-        const ai = cloudInstance.extend.AI;
-        const aiModel = ai.createModel(modelProvider);
         
-        // 构建messages数组，支持systemPrompt
-        const messages = [];
-        // 如果有systemPrompt，添加到messages开头
-        if (this.data.systemPrompt) {
-          messages.push({
-            role: 'system',
-            content: this.data.systemPrompt
-          });
-        }
-        // 添加历史对话记录
-        messages.push(
-          ...chatRecords.map((item) => ({
-            role: item.role,
-            content: item.content,
-          })),
-          {
-            role: "user",
-            content: inputValue,
-          }
-        );
-        
-        const res = await aiModel.streamText({
-          data: {
-            model: quickResponseModel,
-            messages: messages,
-          },
-        });
-        let contentText = "";
-        let reasoningText = "";
-        let chatStatus = 2;
-        let isManuallyPaused = false;
-        let startTime = null; //记录开始思考时间
-        let endTime = null; // 记录结束思考时间
-        for await (let event of res.eventStream) {
-          if (this.data.chatStatus === 0) {
-            isManuallyPaused = true;
-            break;
-          }
-          this.toBottom();
-
-          const { data } = event;
-          try {
-            const dataJson = JSON.parse(data);
-            const { id, choices = [] } = dataJson || {};
-            const { delta, finish_reason } = choices[0] || {};
-            if (finish_reason === "stop") {
-              break;
-            }
-            const { content, reasoning_content, role } = delta;
-            reasoningText += reasoning_content || "";
-            contentText += content || "";
-            const newValue = [...this.data.chatRecords];
-            const lastValue = newValue[newValue.length - 1];
-            lastValue.content = contentText;
-            lastValue.reasoning_content = reasoningText;
-            lastValue.record_id = "record_id" + String(id);
-            if (!!reasoningText && !contentText) {
-              // 推理中
-              chatStatus = 2;
-              if (!startTime) {
-                startTime = +new Date();
-                endTime = +new Date();
-              } else {
-                endTime = +new Date();
+        // 检查是否使用扣子API
+        if (modelProvider === "coze") {
+          // 构建扣子API的additional_messages格式
+          const additionalMessages = [];
+          
+          // 获取systemPrompt（只在第一次对话时使用）
+          const systemPromptText = this.data.systemPrompt || '';
+          // 判断是否是第一次对话（没有历史消息或只有欢迎消息）
+          const hasHistory = chatRecords.some(item => 
+            (item.role === 'user' || item.role === 'assistant') && item.content
+          );
+          
+          // 添加历史对话记录（只包含user和assistant消息）
+          const historyMessages = chatRecords
+            .filter(item => item.role === 'user' || item.role === 'assistant')
+            .map((item) => {
+              if (item.role === 'user') {
+                return {
+                  content: item.content,
+                  content_type: "text",
+                  role: "user",
+                  type: "question"
+                };
+              } else if (item.role === 'assistant') {
+                return {
+                  content: item.content,
+                  content_type: "text",
+                  role: "assistant",
+                  type: "answer"
+                };
               }
-            } else {
-              chatStatus = 3;
-            }
-            lastValue.thinkingTime = endTime ? Math.floor((endTime - startTime) / 1000) : 0;
-            this.setData({ chatRecords: newValue, chatStatus });
-          } catch (e) {
-            // console.log(e, event)
-            break;
-          }
-        }
-        const newValue = [...this.data.chatRecords];
-        const lastValue = newValue[newValue.length - 1];
-        lastValue.hiddenBtnGround = isManuallyPaused; // 用户手动暂停，不显示下面的按钮
-        this.setData({ chatRecords: newValue, chatStatus: 0 }); // 回正
-        
-        // 触发消息完成事件（model模式）
-        if (newValue.length > 0) {
-          const lastMessage = newValue[newValue.length - 1];
-          if (lastMessage.role === 'assistant' && lastMessage.content) {
-            this.triggerEvent('messagecomplete', {
-              message: {
-                role: 'assistant',
-                content: lastMessage.content,
-                record_id: lastMessage.record_id
+              return null;
+            })
+            .filter(item => item !== null);
+          
+          additionalMessages.push(...historyMessages);
+          
+          // 添加当前用户消息
+          // 如果是第一次对话且有systemPrompt，将其合并到第一条用户消息中
+          // 否则只发送当前消息
+          const currentUserMessage = {
+            content: (!hasHistory && systemPromptText) 
+              ? `${systemPromptText}\n\n${inputValue}` 
+              : inputValue,
+            content_type: "text",
+            role: "user",
+            type: "question"
+          };
+          additionalMessages.push(currentUserMessage);
+          
+          // 调用云函数
+          try {
+            // 先设置为发送中状态，显示"对方正在输入中"
+            this.setData({ chatStatus: 1 }); // 发送中，显示"对方正在输入中"
+            
+            const res = await wx.cloud.callFunction({
+              name: 'callCozeAgent',
+              data: {
+                user_id: undefined, // 让云函数自动使用openid
+                additional_messages: additionalMessages
               }
             });
+            
+            // 收到响应后，设置为思考中或输出中状态
+            this.setData({ chatStatus: 2 }); // 思考中
+            
+            console.log('云函数返回结果:', res);
+            
+            if (res.result && res.result.success) {
+              let contentText = "";
+              let chatStatus = 3;
+              let isManuallyPaused = false;
+              const newValue = [...this.data.chatRecords];
+              const lastValue = newValue[newValue.length - 1];
+              
+              // 处理流式响应事件
+              if (res.result.events && res.result.events.length > 0) {
+                
+                for (const event of res.result.events) {
+                  if (this.data.chatStatus === 0) {
+                    isManuallyPaused = true;
+                    break; // 用户暂停
+                  }
+                  
+                  this.toBottom();
+                  
+                  // 根据扣子API的实际返回格式解析内容
+                  // 扣子API返回的事件类型：conversation.message.delta（增量内容）和 conversation.message.completed（完整内容）
+                  const eventType = event.eventType || '';
+                  
+                  // 跳过verbose类型的事件（这些是内部状态信息，不是用户可见的内容）
+                  if (eventType.includes('verbose') || event.type === 'verbose') {
+                    continue;
+                  }
+                  
+                  // 处理消息增量事件（流式输出）
+                  if (eventType === 'conversation.message.delta' || eventType.includes('message.delta')) {
+                    // 确保是assistant角色的消息，且type是answer
+                    if (event.role === 'assistant' && (event.type === 'answer' || !event.type)) {
+                      const content = event.content || '';
+                      if (content && typeof content === 'string') {
+                        contentText += content;
+                        lastValue.content = contentText;
+                        lastValue.record_id = event.id || event.message_id || event.conversation_id || "record_id" + String(+new Date());
+                        this.setData({ chatRecords: newValue, chatStatus: 3 });
+                        console.log('处理delta事件，当前内容长度:', contentText.length);
+                      }
+                    }
+                  }
+                  // 处理消息完成事件（包含完整内容）
+                  else if (eventType === 'conversation.message.completed' || eventType.includes('message.completed')) {
+                    // 确保是assistant角色的消息，且type是answer
+                    if (event.role === 'assistant' && (event.type === 'answer' || !event.type)) {
+                      const content = event.content || '';
+                      if (content && typeof content === 'string') {
+                        // 如果已经有增量内容，使用完整内容替换（更准确）
+                        contentText = content;
+                        lastValue.content = contentText;
+                        lastValue.record_id = event.id || event.message_id || event.conversation_id || "record_id" + String(+new Date());
+                        this.setData({ chatRecords: newValue, chatStatus: 3 });
+                        console.log('处理completed事件，完整内容长度:', contentText.length);
+                      }
+                    }
+                  }
+                  // 兼容其他格式（但也要过滤verbose）
+                  else if (event.content && typeof event.content === 'string' && event.role === 'assistant' && event.type !== 'verbose') {
+                    // 直接包含content字段
+                    contentText += event.content;
+                    lastValue.content = contentText;
+                    lastValue.record_id = event.id || "record_id" + String(+new Date());
+                    this.setData({ chatRecords: newValue, chatStatus: 3 });
+                  } else if (event.message && event.message.content && event.message.role === 'assistant') {
+                    const content = event.message.content;
+                    if (typeof content === 'string') {
+                      contentText += content;
+                      lastValue.content = contentText;
+                      lastValue.record_id = event.id || event.message_id || event.conversation_id || "record_id" + String(+new Date());
+                      this.setData({ chatRecords: newValue, chatStatus: 3 });
+                    }
+                  }
+                }
+                
+                console.log('events处理完成，最终内容长度:', contentText.length);
+              }
+              
+              // 如果没有从流式事件中获取到内容，尝试从rawData解析SSE格式
+              if (!contentText && res.result.rawData) {
+                console.log('从rawData解析SSE数据');
+                try {
+                  // 解析SSE格式的rawData
+                  const eventBlocks = res.result.rawData.split(/\n\n+/);
+                  
+                  for (const block of eventBlocks) {
+                    if (!block.trim()) continue;
+                    
+                    const lines = block.split('\n');
+                    let eventType = null;
+                    let eventData = null;
+                    
+                    for (const line of lines) {
+                      const trimmed = line.trim();
+                      
+                      // 解析event行
+                      if (trimmed.startsWith('event:')) {
+                        eventType = trimmed.substring(6).trim();
+                        continue;
+                      }
+                      
+                      // 解析data行
+                      if (trimmed.startsWith('data:')) {
+                        const dataStr = trimmed.substring(5).trim();
+                        if (dataStr === '[DONE]' || dataStr === '') {
+                          continue;
+                        }
+                        try {
+                          eventData = JSON.parse(dataStr);
+                        } catch (e) {
+                          continue;
+                        }
+                      }
+                    }
+                    
+                    // 跳过verbose类型的事件
+                    if (eventType && (eventType.includes('verbose') || eventData.type === 'verbose')) {
+                      continue;
+                    }
+                    
+                    // 处理消息增量事件
+                    if (eventData && eventType && 
+                        (eventType === 'conversation.message.delta' || eventType.includes('message.delta'))) {
+                      // 确保是assistant角色的消息，且type是answer
+                      if (eventData.role === 'assistant' && (eventData.type === 'answer' || !eventData.type)) {
+                        const content = eventData.content || '';
+                        if (content && typeof content === 'string') {
+                          contentText += content;
+                          lastValue.content = contentText;
+                          lastValue.record_id = eventData.id || "record_id" + String(+new Date());
+                          this.setData({ chatRecords: newValue, chatStatus: 3 });
+                          this.toBottom();
+                        }
+                      }
+                    }
+                    // 处理消息完成事件（使用完整内容）
+                    else if (eventData && eventType && 
+                             (eventType === 'conversation.message.completed' || eventType.includes('message.completed'))) {
+                      // 确保是assistant角色的消息，且type是answer
+                      if (eventData.role === 'assistant' && (eventData.type === 'answer' || !eventData.type)) {
+                        const content = eventData.content || '';
+                        if (content && typeof content === 'string') {
+                          contentText = content; // 使用完整内容
+                          lastValue.content = contentText;
+                          lastValue.record_id = eventData.id || "record_id" + String(+new Date());
+                          this.setData({ chatRecords: newValue, chatStatus: 3 });
+                          this.toBottom();
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (contentText) {
+                    console.log('从rawData成功解析内容，长度:', contentText.length);
+                  }
+                } catch (e) {
+                  console.error('解析rawData失败', e);
+                }
+              }
+              
+              lastValue.hiddenBtnGround = isManuallyPaused;
+              this.setData({ chatRecords: newValue, chatStatus: 0 });
+              
+              // 触发消息完成事件
+              if (contentText) {
+                this.triggerEvent('messagecomplete', {
+                  message: {
+                    role: 'assistant',
+                    content: contentText,
+                    record_id: lastValue.record_id
+                  }
+                });
+              } else {
+                // 如果没有获取到内容，显示错误
+                lastValue.content = this.data.defaultErrorMsg;
+                lastValue.error = '未获取到有效响应';
+                this.setData({ chatRecords: newValue, chatStatus: 0 });
+              }
+            } else {
+              // 详细记录错误信息
+              console.error('云函数返回失败:', res.result);
+              
+              // 检查是否是扣子API的错误
+              let errorMsg = '调用扣子API失败';
+              if (res.result?.error) {
+                errorMsg = res.result.error;
+              } else if (res.result?.events && res.result.events.length > 0) {
+                // 检查events中是否包含错误
+                const errorEvent = res.result.events.find(e => e.code && e.code !== 0);
+                if (errorEvent) {
+                  errorMsg = errorEvent.msg || errorEvent.message || `扣子API错误: ${errorEvent.code}`;
+                  // 特殊处理token错误
+                  if (errorEvent.code === 4101) {
+                    errorMsg = '扣子API Token错误，请检查token配置';
+                  }
+                }
+              } else if (res.result?.errorDetail) {
+                errorMsg = res.result.errorDetail;
+              }
+              
+              throw new Error(errorMsg);
+            }
+          } catch (error) {
+            console.error('调用扣子API失败:', error);
+            const newValue = [...this.data.chatRecords];
+            const lastValue = newValue[newValue.length - 1];
+            
+            // 处理不同类型的错误
+            let errorMessage = '网络错误，请稍后重试';
+            if (error.errMsg) {
+              if (error.errMsg.includes('FunctionName parameter could not be found') || 
+                  error.errMsg.includes('FUNCTION NOT FOUND')) {
+                errorMessage = '云函数未部署，请先在微信开发者工具中部署 callCozeAgent 云函数';
+              } else if (error.errMsg.includes('network')) {
+                errorMessage = '网络连接失败，请检查网络';
+              } else {
+                errorMessage = error.errMsg;
+              }
+            } else if (error.message) {
+              errorMessage = error.message;
+            } else if (typeof error === 'string') {
+              errorMessage = error;
+            }
+            
+            lastValue.error = errorMessage;
+            lastValue.content = this.data.defaultErrorMsg;
+            this.setData({ chatRecords: newValue, chatStatus: 0 });
+            
+            // 如果是云函数未部署的错误，显示提示
+            if (errorMessage.includes('云函数未部署')) {
+              wx.showModal({
+                title: '提示',
+                content: '请先在微信开发者工具中右键 cloudfunctions/callCozeAgent 文件夹，选择"上传并部署：云端安装依赖"',
+                showCancel: false
+              });
+            }
+          }
+        } else {
+          // 原有的云开发AI调用逻辑（deepseek等）
+          const cloudInstance = await getCloudInstance(this.data.envShareConfig);
+          const ai = cloudInstance.extend.AI;
+          const aiModel = ai.createModel(modelProvider);
+          
+          // 构建messages数组，支持systemPrompt
+          const messages = [];
+          // 如果有systemPrompt，添加到messages开头
+          if (this.data.systemPrompt) {
+            messages.push({
+              role: 'system',
+              content: this.data.systemPrompt
+            });
+          }
+          // 添加历史对话记录
+          messages.push(
+            ...chatRecords.map((item) => ({
+              role: item.role,
+              content: item.content,
+            })),
+            {
+              role: "user",
+              content: inputValue,
+            }
+          );
+          
+          const res = await aiModel.streamText({
+            data: {
+              model: quickResponseModel,
+              messages: messages,
+            },
+          });
+          let contentText = "";
+          let reasoningText = "";
+          let chatStatus = 2;
+          let isManuallyPaused = false;
+          let startTime = null; //记录开始思考时间
+          let endTime = null; // 记录结束思考时间
+          for await (let event of res.eventStream) {
+            if (this.data.chatStatus === 0) {
+              isManuallyPaused = true;
+              break;
+            }
+            this.toBottom();
+
+            const { data } = event;
+            try {
+              const dataJson = JSON.parse(data);
+              const { id, choices = [] } = dataJson || {};
+              const { delta, finish_reason } = choices[0] || {};
+              if (finish_reason === "stop") {
+                break;
+              }
+              const { content, reasoning_content, role } = delta;
+              reasoningText += reasoning_content || "";
+              contentText += content || "";
+              const newValue = [...this.data.chatRecords];
+              const lastValue = newValue[newValue.length - 1];
+              lastValue.content = contentText;
+              lastValue.reasoning_content = reasoningText;
+              lastValue.record_id = "record_id" + String(id);
+              if (!!reasoningText && !contentText) {
+                // 推理中
+                chatStatus = 2;
+                if (!startTime) {
+                  startTime = +new Date();
+                  endTime = +new Date();
+                } else {
+                  endTime = +new Date();
+                }
+              } else {
+                chatStatus = 3;
+              }
+              lastValue.thinkingTime = endTime ? Math.floor((endTime - startTime) / 1000) : 0;
+              this.setData({ chatRecords: newValue, chatStatus });
+            } catch (e) {
+              // console.log(e, event)
+              break;
+            }
+          }
+          const newValue = [...this.data.chatRecords];
+          const lastValue = newValue[newValue.length - 1];
+          lastValue.hiddenBtnGround = isManuallyPaused; // 用户手动暂停，不显示下面的按钮
+          this.setData({ chatRecords: newValue, chatStatus: 0 }); // 回正
+          
+          // 触发消息完成事件（model模式）
+          if (newValue.length > 0) {
+            const lastMessage = newValue[newValue.length - 1];
+            if (lastMessage.role === 'assistant' && lastMessage.content) {
+              this.triggerEvent('messagecomplete', {
+                message: {
+                  role: 'assistant',
+                  content: lastMessage.content,
+                  record_id: lastMessage.record_id
+                }
+              });
+            }
           }
         }
       }

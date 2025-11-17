@@ -3,11 +3,11 @@
 // 预设患者角色数据
 const defaultPatients = [
   {
-    name: "焦虑症患者-小李",
-    description: "28岁，IT工程师，近期工作压力大",
-    symptoms: ["焦虑", "失眠", "注意力不集中"],
+    name: "焦虑症患者-谢女士",
+    description: "23岁，未婚的小学老师，深陷工作完美主义漩涡近半年",
+    symptoms: ["焦虑", "健康受损", "完美主义","工作压力大"],
     background: "最近项目deadline临近，经常加班到深夜，感到压力很大，晚上难以入睡，白天注意力难以集中。",
-    prompt: "你是一位28岁的IT工程师，最近工作压力很大，项目deadline临近，经常加班到深夜。你感到焦虑、失眠，注意力难以集中。在咨询中，你会表现出紧张、语速较快、担心工作完成情况，经常提到'压力'、'睡不着'、'担心'等词汇。你正在接受心理咨询，咨询师会向你提问，你需要以患者的身份如实回答。",
+    prompt: "一位 23 岁未婚的小学老师。成长于双中学老师家庭，从小受父母 “需付出 120% 努力” 的高压要求影响，深陷工作完美主义漩涡近半年。因完美主义，健康受损（如气短、偏头痛），恋爱关系也受到严重影响，渴望找到工作与生活的平衡，前来向心理咨询师寻求帮助。",
     avatar: "",
     category: "焦虑症"
   },
@@ -94,6 +94,144 @@ async function initPatients() {
   }
 }
 
+// 更新患者角色数据（根据name字段匹配并更新，添加新的患者）
+async function updatePatients(forceUpdate = false) {
+  try {
+    const db = wx.cloud.database();
+    console.log('开始更新患者角色数据...');
+    
+    // 获取所有现有患者
+    const existingRes = await db.collection('patients').get();
+    const existingPatients = existingRes.data;
+    
+    let updatedCount = 0;
+    let addedCount = 0;
+    let deletedCount = 0;
+    
+    // 遍历默认患者数据
+    for (let patient of defaultPatients) {
+      const existingPatient = existingPatients.find(p => p.name === patient.name);
+      
+      if (existingPatient) {
+        // 如果存在，根据forceUpdate决定是否更新
+        if (forceUpdate) {
+          try {
+            // 先删除旧记录
+            await db.collection('patients').doc(existingPatient._id).remove();
+            // 再添加新记录（这样可以确保完全替换，包括删除旧字段）
+            await db.collection('patients').add({
+              data: {
+                ...patient,
+                createTime: db.serverDate()
+              }
+            });
+            updatedCount++;
+            console.log(`已更新患者: ${patient.name}`);
+          } catch (e) {
+            console.error(`更新患者失败 ${patient.name}:`, e);
+          }
+        } else {
+          console.log(`患者已存在，跳过: ${patient.name}`);
+        }
+      } else {
+        // 如果不存在，添加新患者
+        try {
+          await db.collection('patients').add({
+            data: {
+              ...patient,
+              createTime: db.serverDate()
+            }
+          });
+          addedCount++;
+          console.log(`已添加新患者: ${patient.name}`);
+        } catch (e) {
+          console.error(`添加患者失败 ${patient.name}:`, e);
+        }
+      }
+    }
+    
+    // 如果forceUpdate为true，删除不在defaultPatients中的患者
+    if (forceUpdate) {
+      const defaultNames = defaultPatients.map(p => p.name);
+      for (let existingPatient of existingPatients) {
+        if (!defaultNames.includes(existingPatient.name)) {
+          try {
+            await db.collection('patients').doc(existingPatient._id).remove();
+            deletedCount++;
+            console.log(`已删除不在默认列表中的患者: ${existingPatient.name}`);
+          } catch (e) {
+            console.error(`删除患者失败 ${existingPatient.name}:`, e);
+          }
+        }
+      }
+    }
+    
+    console.log(`患者角色数据更新完成: 更新 ${updatedCount} 条，新增 ${addedCount} 条，删除 ${deletedCount} 条`);
+    return {
+      success: true,
+      updated: updatedCount,
+      added: addedCount,
+      deleted: deletedCount
+    };
+  } catch (e) {
+    console.error('更新患者角色数据失败', e);
+    return {
+      success: false,
+      error: e.message || e.errMsg
+    };
+  }
+}
+
+// 强制重置患者角色数据（删除所有现有数据并重新插入）
+async function resetPatients() {
+  try {
+    const db = wx.cloud.database();
+    console.log('开始重置患者角色数据...');
+    
+    // 获取所有现有患者
+    const existingRes = await db.collection('patients').get();
+    const existingPatients = existingRes.data;
+    
+    // 删除所有现有患者
+    for (let patient of existingPatients) {
+      try {
+        await db.collection('patients').doc(patient._id).remove();
+      } catch (e) {
+        console.error(`删除患者失败 ${patient.name}:`, e);
+      }
+    }
+    
+    console.log(`已删除 ${existingPatients.length} 条现有患者数据`);
+    
+    // 重新插入默认患者数据
+    for (let patient of defaultPatients) {
+      try {
+        await db.collection('patients').add({
+          data: {
+            ...patient,
+            createTime: db.serverDate()
+          }
+        });
+      } catch (e) {
+        console.error(`插入患者角色失败 ${patient.name}:`, e);
+      }
+    }
+    
+    console.log(`患者角色数据重置完成，已插入 ${defaultPatients.length} 条数据`);
+    return {
+      success: true,
+      deleted: existingPatients.length,
+      added: defaultPatients.length
+    };
+  } catch (e) {
+    console.error('重置患者角色数据失败', e);
+    return {
+      success: false,
+      error: e.message || e.errMsg
+    };
+  }
+}
+
 // 初始化reports集合（确保集合存在）
 async function initReportsCollection() {
   try {
@@ -142,6 +280,8 @@ async function initConversationsCollection() {
 
 module.exports = {
   initPatients: initPatients,
+  updatePatients: updatePatients,
+  resetPatients: resetPatients,
   initReportsCollection: initReportsCollection,
   initConversationsCollection: initConversationsCollection
 };

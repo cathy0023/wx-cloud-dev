@@ -70,27 +70,99 @@ Page({
   },
 
   // 查看对话详情
-  viewConversation(e) {
+  async viewConversation(e) {
     const conversationId = e.currentTarget.dataset.id;
-    // 跳转到对话详情或报告页面
-    // 先尝试查找是否有对应的报告
-    db.collection('reports').where({
-      conversationId: conversationId
-    }).get().then(res => {
-      if (res.data.length > 0) {
-        // 有报告，跳转到报告页面
+    wx.showLoading({ title: '查询中...' });
+    
+    try {
+      // 先检查对话记录状态
+      const convRes = await db.collection('conversations').doc(conversationId).get();
+      const conversation = convRes.data;
+      
+      console.log('对话记录信息:', {
+        conversationId: conversationId,
+        status: conversation.status,
+        hasMessages: !!conversation.messages,
+        messageCount: conversation.messages ? conversation.messages.length : 0
+      });
+      
+      // 如果对话未结束，提示用户
+      if (conversation.status !== '已结束') {
+        wx.hideLoading();
+        wx.showModal({
+          title: '对话详情',
+          content: '该对话尚未结束，无法查看报告',
+          showCancel: false
+        });
+        return;
+      }
+      
+      // 使用云函数查询报告，避免小程序端权限问题
+      const reportRes = await wx.cloud.callFunction({
+        name: 'getReport',
+        data: {
+          conversationId: conversationId
+        }
+      });
+      
+      wx.hideLoading();
+      
+      console.log('查询报告结果（云函数）:', {
+        conversationId: conversationId,
+        result: reportRes.result
+      });
+      
+      if (reportRes.result && reportRes.result.success && reportRes.result.reportId) {
+        // 有报告，将报告数据保存到本地存储，避免报告页面再次查询时权限问题
+        if (reportRes.result.report) {
+          wx.setStorageSync(`report_${reportRes.result.reportId}`, reportRes.result.report);
+          console.log('报告数据已保存到本地存储');
+        }
+        
+        // 跳转到报告页面
         wx.navigateTo({
-          url: `/pages/report/report?reportId=${res.data[0]._id}`
+          url: `/pages/report/report?reportId=${reportRes.result.reportId}`
         });
       } else {
         // 没有报告，显示对话详情
+        const errorMsg = reportRes.result?.error || '未找到报告';
+        console.warn('报告查询失败:', errorMsg);
+        
         wx.showModal({
           title: '对话详情',
-          content: '该对话尚未生成报告',
-          showCancel: false
+          content: `该对话尚未生成报告。\n\n错误信息：${errorMsg}`,
+          showCancel: false,
+          confirmText: '确定',
+          success: (res) => {
+            if (res.confirm) {
+              console.warn('报告查询失败，可能的原因：');
+              console.warn('1. 报告确实未生成');
+              console.warn('2. 报告生成时保存失败');
+              console.warn('3. 数据库权限或索引问题');
+            }
+          }
         });
       }
-    });
+    } catch (error) {
+      wx.hideLoading();
+      console.error('查询报告失败:', error);
+      
+      // 详细记录错误信息
+      const errorInfo = {
+        errCode: error.errCode,
+        errMsg: error.errMsg,
+        message: error.message,
+        conversationId: conversationId
+      };
+      console.error('错误详情:', errorInfo);
+      
+      // 如果查询失败，可能是权限问题或网络问题
+      wx.showModal({
+        title: '查询失败',
+        content: `查询报告时出错：${error.errMsg || error.message || '未知错误'}\n\n请检查：\n1. 网络连接是否正常\n2. 数据库权限是否正确\n3. 索引是否已创建`,
+        showCancel: false
+      });
+    }
   },
 
   // 删除对话记录

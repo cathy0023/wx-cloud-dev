@@ -178,7 +178,6 @@
                     </block>
                   </block>
                 </view>
-                <image  wx:if="{{(chatRecords.length - 1) === index && (chatStatus === 2 || chatStatus === 3)}}" mode="widthFix"  src='./imgs/loading.svg' style="width: 14px;height: 14px;" />
               </block>
             </view>
           </view>
