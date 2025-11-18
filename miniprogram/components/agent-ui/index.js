@@ -132,6 +132,10 @@ Component({
     },
     voiceRecognizing: false,
     speedList: [2, 1.5, 1.25, 1, 0.75],
+    recordDuration: 0, // 录音时长（秒）
+    recordTimer: null, // 录音时长定时器
+    recordStartTime: 0, // 录音开始时间戳
+    isRecordTimeLimit: false, // 是否达到60秒限制
   },
   attached: async function () {
     const chatMode = this.data.chatMode;
@@ -146,6 +150,47 @@ Component({
     }
     // 初始化一次cloudInstance，它是单例的，后面不传参数也可以获取到
     const cloudInstance = await getCloudInstance(this.data.envShareConfig);
+    
+    // model 模式也支持语音功能（需要配置 agentConfig.botId）
+    if (chatMode === "model" && this.data.agentConfig?.botId && this.data.agentConfig?.allowVoice) {
+      // 为 model 模式创建一个 bot 对象，使用 agentConfig 中的 botId
+      this.setData({
+        bot: {
+          botId: this.data.agentConfig.botId, // 使用真实的 botId
+          voiceSettings: {
+            enable: true,
+            inputType: 16, // 16=中文普通话, 1=英语
+            outputType: 1  // 1=普通女声
+          }
+        }
+      });
+      
+      // 初始化录音管理器
+      await this.initRecordManager();
+      
+      // 提前获取语音权限
+      wx.getSetting({
+        success(res) {
+          console.log("auth settings", res);
+          if (!res.authSetting["scope.record"]) {
+            wx.authorize({
+              scope: "scope.record",
+              success() {},
+              fail() {
+                wx.openSetting({
+                  success(res) {
+                    if (res.authSetting["scope.record"]) {
+                      console.log("用户手动开启录音权限");
+                    }
+                  },
+                });
+              },
+            });
+          }
+        },
+      });
+    }
+    
     if (chatMode === "bot") {
       const { botId } = this.data.agentConfig;
       const ai = cloudInstance.extend.AI;
@@ -201,20 +246,28 @@ Component({
         showBotName: showBotName,
       });
       console.log("bot", this.data.bot);
+      
+      // 检查并补充语音配置（如果API没有返回voiceSettings）
+      if (!this.data.bot.voiceSettings || !this.data.bot.voiceSettings.enable) {
+        console.log("API未返回语音配置，使用默认配置");
+        this.setData({
+          bot: {
+            ...this.data.bot,
+            voiceSettings: {
+              enable: true,  // 启用语音功能
+              inputType: 16, // 16=中文普通话, 1=英语
+              outputType: 1  // 1=普通女声, 具体值参考腾讯云文档
+            },
+          },
+        });
+      }
+      
       if (chatMode === "bot" && this.data.bot.multiConversationEnable) {
         // 拉一次默认旧会话
         await this.fetchDefaultConversationList();
         // 拉一遍新会话列表
         await this.resetFetchConversationList();
       }
-      // this.setData({
-      //   bot: {
-      //     ...this.data.bot,
-      //     voiceSettings: {
-      //       enable: true,
-      //     },
-      //   },
-      // });
       if (chatMode === "bot" && this.data.bot.voiceSettings?.enable) {
         // 初始化录音管理器
         await this.initRecordManager();
@@ -257,96 +310,133 @@ Component({
       const recorderManager = wx.getRecorderManager();
       recorderManager.onStart(() => {
         console.log("recorder start");
+        // 记录录音开始时间
+        const startTime = Date.now();
+        this.setData({
+          recordStartTime: startTime,
+          recordDuration: 0,
+          isRecordTimeLimit: false,
+        });
+        
+        // 启动定时器，每秒更新录音时长
+        this.data.recordTimer = setInterval(() => {
+          const duration = Math.floor((Date.now() - startTime) / 1000);
+          this.setData({
+            recordDuration: duration,
+          });
+          
+          // 55秒时显示红色警告
+          if (duration >= 55 && duration < 60) {
+            // 已经在UI中通过recordDuration显示警告
+          }
+          
+          // 60秒时自动停止录音
+          if (duration >= 60) {
+            clearInterval(this.data.recordTimer);
+            this.setData({
+              isRecordTimeLimit: true,
+              recordDuration: 60,
+            });
+            // 停止录音
+            if (this.data.recorderManager) {
+              this.data.recorderManager.stop();
+            }
+          }
+        }, 100); // 每100ms更新一次，更精确
       });
       recorderManager.onPause(() => {
         console.log("recorder pause");
       });
       recorderManager.onStop((res) => {
         console.log("停止录音");
+        console.log("录音信息:", res);
         console.log("this.data.sendStatus", this.data.sendStatus);
-        if (this.data.sendStatus === 3) {
-          console.log("确认发送");
-          console.log("recorder stop", res);
-          const { tempFilePath } = res;
-          console.log("tempFilePath", tempFilePath);
-          // const tempFileInfo = tempFilePath.split(".")
-          const fileName = md5(tempFilePath) + ".aac";
-          console.log("fileName", fileName);
-          if (fileName) {
-            new Promise((resolve, reject) => {
-              // 上传至云存储换取 cloudId
-              cloudInstance.uploadFile({
-                cloudPath: `agent_file/${this.data.bot.botId}/${fileName}`, // 云上文件路径
-                filePath: tempFilePath,
-                success: async (res) => {
-                  console.log("uploadFile res", res);
-                  const fileId = res.fileID;
-                  cloudInstance.getTempFileURL({
-                    fileList: [fileId], // 文件唯一标识符 cloudID, 可通过上传文件接口获取
-                    success: (res) => {
-                      console.log("getTempFileURL", res);
-                      const { fileList } = res;
-                      if (fileList && fileList.length) {
-                        // 调用语音转文本接口获取文本
-                        console.log("开始转文字");
-                        commonRequest({
-                          path: `bots/${this.data.bot.botId}/speech-to-text`,
-                          data: {
-                            url: fileList[0].tempFileURL,
-                            engSerViceType: this.data.bot.voiceSettings?.inputType,
-                            voiceFormat: "aac",
-                          }, //
-                          method: "POST",
-                          timeout: 60000,
-                          success: (res) => {
-                            console.log("speech-to-text res", res);
-                            const { data } = res;
-                            if (data && data.Result) {
-                              this.sendMessage(data.Result);
-                              resolve(data.Result);
-                            } else {
-                              resolve();
-                            }
-                          },
-                          fail: (e) => {
-                            console.log("e", e);
-                            reject(e);
-                          },
-                          complete: () => {},
-                          header: {},
-                        });
-                      }
-                    },
-                    fail: (e) => {
-                      reject(e);
-                    },
-                  });
-                },
-                fail: (err) => {
-                  console.error("上传失败：", err);
-                  reject(err);
-                },
-              });
-            }).finally(() => {
+        
+        // 清除录音时长定时器
+        if (this.data.recordTimer) {
+          clearInterval(this.data.recordTimer);
+          this.data.recordTimer = null;
+        }
+        
+        // 检查录音时长
+        if (res.duration < 1000) {
+          console.warn("录音时长太短:", res.duration, "ms");
+          wx.showToast({
+            title: '录音时间太短',
+            icon: 'none',
+            duration: 2000
+          });
+          this.setData({
+            sendStatus: 0,
+            longPressTriggered: false,
+            recordDuration: 0,
+            isRecordTimeLimit: false,
+          });
+          return;
+        }
+        
+        // 如果达到60秒限制，弹出确认对话框
+        if (this.data.isRecordTimeLimit) {
+          wx.showModal({
+            title: '录音时长已达60秒',
+            content: '录音已达到最大时长限制，是否发送这60秒的语音？',
+            confirmText: '发送',
+            cancelText: '取消',
+            success: (modalRes) => {
+              if (modalRes.confirm) {
+                // 用户确认发送
+                this.setData({
+                  sendStatus: 3,
+                  voiceRecognizing: true,
+                });
+                // 继续执行发送逻辑
+                this.handleRecordStopSend(res);
+              } else {
+                // 用户取消发送
+                this.setData({
+                  sendStatus: 0,
+                  longPressTriggered: false,
+                  recordDuration: 0,
+                  isRecordTimeLimit: false,
+                });
+              }
+            },
+            fail: () => {
               this.setData({
                 sendStatus: 0,
-                voiceRecognizing: false,
                 longPressTriggered: false,
+                recordDuration: 0,
+                isRecordTimeLimit: false,
               });
-            });
-          }
+            }
+          });
+          return;
+        }
+        
+        if (this.data.sendStatus === 3) {
+          // 执行发送逻辑
+          this.handleRecordStopSend(res);
         } else {
           this.setData({
             sendStatus: 0,
             longPressTriggered: false,
+            recordDuration: 0,
+            isRecordTimeLimit: false,
           });
         }
         // console.log('this.data.sendStatus', this.data.sendStatus)
       });
       recorderManager.onError((err) => {
         console.log("recorder err", err);
+        // 清除录音时长定时器
+        if (this.data.recordTimer) {
+          clearInterval(this.data.recordTimer);
+          this.data.recordTimer = null;
+        }
         this.setData({
           sendStatus: 0,
+          recordDuration: 0,
+          isRecordTimeLimit: false,
         });
       });
       this.setData({
@@ -354,6 +444,7 @@ Component({
       });
     },
     handleChangeInputType(e) {
+      console.log('handleChangeInputType', this.data.bot);
       // 检查当前语音能力权限
       if (!this.data.bot.voiceSettings?.enable) {
         wx.showModal({
@@ -2490,9 +2581,16 @@ Component({
     cancelSendVoice() {
       // 取消语音发送
       console.log("取消发送");
+      // 清除录音时长定时器
+      if (this.data.recordTimer) {
+        clearInterval(this.data.recordTimer);
+        this.data.recordTimer = null;
+      }
       if (this.data.recorderManager) {
         this.setData({
           sendStatus: 4,
+          recordDuration: 0,
+          isRecordTimeLimit: false,
         });
         console.log("停止录音");
         this.data.recorderManager.stop();
@@ -2503,6 +2601,154 @@ Component({
       if (this.data.recorderManager && this.data.sendStatus === 1) {
         console.log("开始录音");
         this.data.recorderManager.start(this.data.recordOptions);
+      }
+    },
+    // 处理录音停止后的发送逻辑
+    async handleRecordStopSend(res) {
+      console.log("确认发送");
+      console.log("recorder stop", res);
+      const { tempFilePath } = res;
+      console.log("tempFilePath", tempFilePath);
+      console.log("录音时长:", res.duration, "ms");
+      console.log("文件大小:", res.fileSize, "bytes");
+      
+      const cloudInstance = await getCloudInstance();
+      // const tempFileInfo = tempFilePath.split(".")
+      const fileName = md5(tempFilePath) + ".aac";
+      console.log("fileName", fileName);
+      if (fileName) {
+        try {
+          // 上传至云存储换取 cloudId
+          const uploadRes = await new Promise((resolve, reject) => {
+            cloudInstance.uploadFile({
+              cloudPath: `agent_file/${this.data.bot.botId}/${fileName}`, // 云上文件路径
+              filePath: tempFilePath,
+              success: resolve,
+              fail: reject,
+            });
+          });
+          
+          console.log("uploadFile res", uploadRes);
+          const fileId = uploadRes.fileID;
+          
+          // 获取临时文件URL
+          const urlRes = await new Promise((resolve, reject) => {
+            cloudInstance.getTempFileURL({
+              fileList: [fileId], // 文件唯一标识符 cloudID, 可通过上传文件接口获取
+              success: resolve,
+              fail: reject,
+            });
+          });
+          
+          console.log("getTempFileURL", urlRes);
+          const { fileList } = urlRes;
+          if (fileList && fileList.length) {
+            // 调用语音转文本接口获取文本
+            console.log("开始转文字，音频URL:", fileList[0].tempFileURL);
+            console.log("语音识别参数:", {
+              url: fileList[0].tempFileURL,
+              engSerViceType: "16k_zh",
+              voiceFormat: "aac"
+            });
+            
+            // 显示识别中提示
+            wx.showLoading({
+              title: '识别中...',
+              mask: true
+            });
+            
+            commonRequest({
+              path: `bots/${this.data.bot.botId}/speech-to-text`,
+              data: {
+                url: fileList[0].tempFileURL,
+                // 注意：engSerViceType 必须是字符串类型
+                engSerViceType: "16k_zh",
+                voiceFormat: "aac",  // 必须与录音格式一致
+              }, //
+              method: "POST",
+              timeout: 60000,
+              success: (res) => {
+                wx.hideLoading();
+                console.log("speech-to-text 成功响应:", res);
+                const { data } = res;
+                if (data && data.Result) {
+                  console.log("识别结果:", data.Result);
+                  this.sendMessage(data.Result);
+                } else {
+                  console.log("未获取到识别结果，完整响应:", data);
+                  wx.showToast({
+                    title: '未识别到内容',
+                    icon: 'none',
+                    duration: 2000
+                  });
+                }
+                this.setData({
+                  sendStatus: 0,
+                  voiceRecognizing: false,
+                  longPressTriggered: false,
+                  recordDuration: 0,
+                  isRecordTimeLimit: false,
+                });
+              },
+              fail: (e) => {
+                wx.hideLoading();
+                console.error("speech-to-text 失败:", e);
+                
+                // 详细的错误信息
+                let errorMsg = '语音识别失败';
+                if (e.data && e.data.message) {
+                  errorMsg = e.data.message;
+                } else if (e.errMsg) {
+                  errorMsg = e.errMsg;
+                }
+                
+                console.error("详细错误:", {
+                  statusCode: e.statusCode,
+                  data: e.data,
+                  errMsg: e.errMsg
+                });
+                
+                // 如果是 500 错误，可能是 Bot 配置问题
+                if (e.statusCode === 500) {
+                  wx.showModal({
+                    title: '语音识别失败',
+                    content: '请检查：\n1. Bot 是否已启用语音服务\n2. 语音服务配置是否正确\n3. 是否有足够的配额\n\n错误代码: 500',
+                    showCancel: false
+                  });
+                } else {
+                  wx.showToast({
+                    title: errorMsg,
+                    icon: 'none',
+                    duration: 3000
+                  });
+                }
+                this.setData({
+                  sendStatus: 0,
+                  voiceRecognizing: false,
+                  longPressTriggered: false,
+                  recordDuration: 0,
+                  isRecordTimeLimit: false,
+                });
+              },
+              complete: () => {},
+              header: {},
+            });
+          }
+        } catch (err) {
+          console.error("上传失败：", err);
+          wx.showToast({
+            title: '上传失败',
+            icon: 'none',
+            duration: 2000
+          });
+          this.setData({
+            sendStatus: 0,
+            voiceRecognizing: false,
+            longPressTriggered: false,
+            recordDuration: 0,
+            isRecordTimeLimit: false,
+          });
+        }
       }
     },
   },

@@ -1,5 +1,6 @@
 export const checkConfig = (chatMode, agentConfig, modelConfig) => {
   const { botId } = agentConfig || {};
+  console.log('agentConfig', agentConfig)
   const { modelProvider, quickResponseModel, deepReasoningModel } = modelConfig || {};
   // 检测不在微信环境，提示用户
   const appBaseInfo = wx.getAppBaseInfo();

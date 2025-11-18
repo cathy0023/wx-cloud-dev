@@ -235,15 +235,17 @@
         <view hidden="{{useVoice}}" class="input_inner_box">
           <textarea  class="input" value="{{inputValue}}" maxlength="1024" bindfocus="bindInputFocus" bindinput="bindKeyInput" placeholder="说点什么吧" bindconfirm="handleSendMessage" confirm-type="send" adjust-position cursor-spacing="40" auto-height="{{true}}" show-confirm-bar="{{false}}" bindlinechange="handleLineChange" />
         </view>
-        <text style="position: absolute;top: -50%;left: 50%;transform: translateX(-50%);font-size: 12px;color: {{sendStatus === 2 ? '#e84f50;' : ''}}">{{sendStatus === 1 ? "松开发送，上滑取消" : (sendStatus === 2 ? "松开取消" : "")}}</text>
+        <text style="position: absolute;top: -50%;left: 50%;transform: translateX(-50%);font-size: 12px;color: {{sendStatus === 2 ? '#e84f50' : (recordDuration >= 55 ? '#e84f50' : '')}}">{{sendStatus === 1 ? (recordDuration >= 60 ? "已达60秒，请确认发送" : (recordDuration >= 55 ? "即将达到60秒限制" : "松开发送，上滑取消")) : (sendStatus === 2 ? "松开取消" : "")}}</text>
         <view hidden="{{!useVoice}}" bindtouchstart="handleTouchStart"  bindtouchmove="handleTouchMove" bindtouchend="handleTouchEnd" class="input_inner_box" style="position: absolute;width: calc(100% - 136rpx);left: 50%;transform: translateX(-50%);opacity: 0;">
         </view>
-        <view hidden="{{!useVoice}}" class="input_inner_box say_box" style="background-color: {{sendStatus === 1 ? '#e9f6ef' : (sendStatus === 2 ? '#f8ecea' : '')}};"><text wx:if="{{!longPressTriggered}}">{{voiceRecognizing ? '识别中' : '按住 说话'}}</text>
-          <image wx:else src="{{ sendStatus === 1 ? './imgs/sendSaying.svg' : (sendStatus === 2 ? './imgs/cancelSaying.svg' : '')}}" class="set" mode="widthFix" />
+        <view hidden="{{!useVoice}}" class="input_inner_box say_box" style="background-color: {{sendStatus === 1 ? (recordDuration >= 55 ? '#f8ecea' : '#e9f6ef') : (sendStatus === 2 ? '#f8ecea' : '')}};">
+          <text wx:if="{{!longPressTriggered}}">{{voiceRecognizing ? '识别中' : '按住 说话'}}</text>
+          <view wx:else style="display: flex;flex-direction: column;align-items: center;gap: 4px;">
+            <image src="{{ sendStatus === 1 ? './imgs/sendSaying.svg' : (sendStatus === 2 ? './imgs/cancelSaying.svg' : '')}}" class="set" mode="widthFix" />
+            <text wx:if="{{longPressTriggered && recordDuration > 0 && recordDuration < 60}}" style="font-size: 10px;color: {{recordDuration >= 55 ? '#e84f50' : '#666'}};">{{recordDuration}}s</text>
+          </view>
         </view>
         <view class="right_btns">
-          <!-- 加号 -->
-          <image src="./imgs/set.svg" class="set" mode="widthFix" bind:tap="handleClickTools" />
           <!-- 发送按钮 -->
           <view wx:if="{{!!inputValue&&chatStatus===0}}" class="set" style="display: flex;justify-content: center;align-items: center;background-color: #436af4;border-radius: 50px;">
             <image src="./imgs/send.svg" class="send-set" mode="widthFix" bind:tap="handleSendMessage" style="transform-origin: 8px 8px;" />

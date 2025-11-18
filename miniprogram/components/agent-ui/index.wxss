@@ -298,7 +298,7 @@
 
 .input_inner_box {
   width: 100%;
-  min-height: 54px;
+  min-height: 44px;
   /* background-color: black; */
   /* background-color: #fff; */
   display: flex;

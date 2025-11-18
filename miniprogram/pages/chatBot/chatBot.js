@@ -10,6 +10,11 @@ Page({
     conversationId: '',
     startTime: null,
     timeoutTimer: null,
+    // 添加 agentConfig 用于语音功能（需要真实的 botId）
+    agentConfig: {
+      botId: "ibot-asr-ndwwryab2z", // 请替换为您在腾讯云控制台创建的 Bot ID
+      allowVoice: true, // 启用语音功能
+    },
     modelConfig: {
       modelProvider: "deepseek", // 不显示deepseek，改为显示患者信息
       quickResponseModel: "deepseek-chat", // 使用 deepseek-chat 模型
